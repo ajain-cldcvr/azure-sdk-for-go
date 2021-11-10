@@ -17,7 +17,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/mock"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/recording"
 )
@@ -401,30 +400,6 @@ func TestManagedIdentityCredential_NewManagedIdentityCredentialFail(t *testing.T
 	_, err = cred.GetToken(context.Background(), policy.TokenRequestOptions{})
 	if err == nil {
 		t.Fatalf("Expected an error but did not receive one")
-	}
-}
-
-func TestBearerPolicy_ManagedIdentityCredential(t *testing.T) {
-	srv, close := mock.NewTLSServer()
-	defer close()
-	srv.AppendResponse(mock.WithBody([]byte(accessTokenRespSuccess)))
-	srv.AppendResponse(mock.WithStatusCode(http.StatusOK))
-	_ = os.Setenv("MSI_ENDPOINT", srv.URL())
-	defer clearEnvVars("MSI_ENDPOINT")
-	options := ManagedIdentityCredentialOptions{}
-	options.Transport = srv
-	cred, err := NewManagedIdentityCredential(&options)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	pipeline := defaultTestPipeline(srv, cred, msiScope)
-	req, err := runtime.NewRequest(context.Background(), http.MethodGet, srv.URL())
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = pipeline.Do(req)
-	if err != nil {
-		t.Fatalf("Expected an empty error but receive: %v", err)
 	}
 }
 

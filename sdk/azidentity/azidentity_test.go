@@ -4,6 +4,8 @@
 package azidentity
 
 import (
+	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -11,6 +13,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
 )
 
 // constants used throughout this package
@@ -27,7 +31,7 @@ func defaultTestPipeline(srv policy.Transporter, cred azcore.TokenCredential, sc
 		RetryDelay:    50 * time.Millisecond,
 	}
 	b := runtime.NewBearerTokenPolicy(cred, []string{scope}, nil)
-	return runtime.NewPipeline("azidentity-test", version, nil, []policy.Policy{b}, &azcore.ClientOptions{Retry: retryOpts, Transport: srv})
+	return runtime.NewPipeline("azidentity-test", version, runtime.PipelineOptions{PerRetry: []policy.Policy{b}}, &azcore.ClientOptions{Retry: retryOpts, Transport: srv})
 }
 
 // constants for this file
@@ -132,3 +136,91 @@ func Test_ValidTenantIDTrue(t *testing.T) {
 		t.Fatal("Expected to receive true, but received false")
 	}
 }
+
+// ==================================================================================================================================
+
+type fakeConfidentialClient struct {
+	// set ar to have all API calls return the provided AuthResult
+	ar confidential.AuthResult
+
+	// set err to have all API calls return the provided error
+	err error
+
+	// set true to have silent auth succeed
+	silentAuth bool
+}
+
+func (f fakeConfidentialClient) returnResult() (confidential.AuthResult, error) {
+	if f.err != nil {
+		return confidential.AuthResult{}, f.err
+	}
+	return f.ar, nil
+}
+
+func (f fakeConfidentialClient) AcquireTokenSilent(ctx context.Context, scopes []string, options ...confidential.AcquireTokenSilentOption) (confidential.AuthResult, error) {
+	if f.silentAuth {
+		return f.ar, nil
+	}
+	return confidential.AuthResult{}, errors.New("silent authentication failed")
+}
+
+func (f fakeConfidentialClient) AcquireTokenByAuthCode(ctx context.Context, code string, redirectURI string, scopes []string, options ...confidential.AcquireTokenByAuthCodeOption) (confidential.AuthResult, error) {
+	return f.returnResult()
+}
+
+func (f fakeConfidentialClient) AcquireTokenByCredential(ctx context.Context, scopes []string) (confidential.AuthResult, error) {
+	return f.returnResult()
+}
+
+var _ confidentialClient = (*fakeConfidentialClient)(nil)
+
+// ==================================================================================================================================
+
+type fakePublicClient struct {
+	// set ar to have all API calls return the provided AuthResult
+	ar public.AuthResult
+
+	// similar to ar but for device code APIs
+	dc public.DeviceCode
+
+	// set err to have all API calls return the provided error
+	err error
+
+	// set true to have silent auth succeed
+	silentAuth bool
+}
+
+func (f fakePublicClient) returnResult() (public.AuthResult, error) {
+	if f.err != nil {
+		return public.AuthResult{}, f.err
+	}
+	return f.ar, nil
+}
+
+func (f fakePublicClient) AcquireTokenSilent(ctx context.Context, scopes []string, options ...public.AcquireTokenSilentOption) (public.AuthResult, error) {
+	if f.silentAuth {
+		return f.ar, nil
+	}
+	return public.AuthResult{}, errors.New("silent authentication failed")
+}
+
+func (f fakePublicClient) AcquireTokenByUsernamePassword(ctx context.Context, scopes []string, username string, password string) (public.AuthResult, error) {
+	return f.returnResult()
+}
+
+func (f fakePublicClient) AcquireTokenByDeviceCode(ctx context.Context, scopes []string) (public.DeviceCode, error) {
+	if f.err != nil {
+		return public.DeviceCode{}, f.err
+	}
+	return f.dc, nil
+}
+
+func (f fakePublicClient) AcquireTokenByAuthCode(ctx context.Context, code string, redirectURI string, scopes []string, options ...public.AcquireTokenByAuthCodeOption) (public.AuthResult, error) {
+	return f.returnResult()
+}
+
+func (f fakePublicClient) AcquireTokenInteractive(ctx context.Context, scopes []string, options ...public.InteractiveAuthOption) (public.AuthResult, error) {
+	return f.returnResult()
+}
+
+var _ publicClient = (*fakePublicClient)(nil)

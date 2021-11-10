@@ -45,6 +45,7 @@ const (
 	fakeClientID   = "fake-client-id"
 	fakeResourceID = "/fake/resource/ID"
 	fakeTenantID   = "fake-tenant"
+	fakeUsername = "fake@user"
 )
 
 var liveTestScope = "https://management.core.windows.net//.default"
@@ -66,7 +67,7 @@ func init() {
 		liveSP.pfxPath = "testdata/certificate.pfx"
 		liveSP.sniPath = "testdata/certificate-with-chain.pem"
 		liveUser.tenantID = fakeTenantID
-		liveUser.username = "fake-user"
+		liveUser.username = fakeUsername
 		liveUser.password = "fake-password"
 	}
 }
@@ -113,14 +114,24 @@ func TestMain(m *testing.M) {
 				}
 			}
 		}
+		if liveUser.username != "" {
+			err = recording.AddURISanitizer(fakeUsername, liveUser.username, nil)
+			if err != nil {
+				panic(err)
+			}
+			err = recording.AddHeaderRegexSanitizer(":path", fakeUsername, liveUser.username, nil)
+			if err != nil {
+				panic(err)
+			}
+		}
 		// remove token request bodies (which are form encoded) because they contain
 		// secrets, are irrelevant in matching, and are formed by MSAL anyway
 		// (note: Cloud Shell would need an exemption from this, and that would be okay--its requests contain no secrets)
-		err = recording.AddBodyRegexSanitizer("{}", `^\S+=\w+`, nil)
+		err = recording.AddBodyRegexSanitizer("{}", `^\S+=.*`, nil)
 		if err != nil {
 			panic(err)
 		}
-		for _, key := range []string{"access_token", "refresh_token"} {
+		for _, key := range []string{"access_token", "device_code", "message", "refresh_token", "user_code"} {
 			err = recording.AddBodyKeySanitizer("$."+key, "redacted", "", nil)
 			if err != nil {
 				panic(err)
