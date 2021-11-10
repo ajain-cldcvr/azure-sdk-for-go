@@ -9,6 +9,8 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
 )
 
 // UsernamePasswordCredentialOptions contains optional parameters for UsernamePasswordCredential.
@@ -25,9 +27,7 @@ type UsernamePasswordCredentialOptions struct {
 // with any form of multi-factor authentication, and the application must already have user or admin consent.
 // This credential can only authenticate work and school accounts; it can't authenticate Microsoft accounts.
 type UsernamePasswordCredential struct {
-	client   *aadIdentityClient
-	tenantID string
-	clientID string
+	client   publicClient
 	username string
 	password string
 }
@@ -50,24 +50,38 @@ func NewUsernamePasswordCredential(tenantID string, clientID string, username st
 	if err != nil {
 		return nil, err
 	}
-	c, err := newAADIdentityClient(authorityHost, &cp.ClientOptions)
+	c, err := public.New(clientID,
+		public.WithAuthority(runtime.JoinPaths(authorityHost, tenantID)),
+		public.WithHTTPClient(newPipelineAdapter(&cp.ClientOptions)),
+	)
 	if err != nil {
 		return nil, err
 	}
-	return &UsernamePasswordCredential{tenantID: tenantID, clientID: clientID, username: username, password: password, client: c}, nil
+	return &UsernamePasswordCredential{username: username, password: password, client: c}, nil
 }
 
 // GetToken obtains a token from Azure Active Directory. This method is called automatically by Azure SDK clients.
 // ctx: Context used to control the request lifetime.
 // opts: Options for the token request, in particular the desired scope of the access token.
 func (c *UsernamePasswordCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (*azcore.AccessToken, error) {
-	tk, err := c.client.authenticateUsernamePassword(ctx, c.tenantID, c.clientID, c.username, c.password, opts.Scopes)
+	tk, err := c.client.AcquireTokenSilent(ctx, opts.Scopes) // TODO do we need the account here
+	if err == nil {
+		logGetTokenSuccess(c, opts)
+		return &azcore.AccessToken{
+			Token:     tk.AccessToken,
+			ExpiresOn: tk.ExpiresOn,
+		}, err
+	}
+	tk, err = c.client.AcquireTokenByUsernamePassword(ctx, opts.Scopes, c.username, c.password)
 	if err != nil {
 		addGetTokenFailureLogs("Username Password Credential", err, true)
-		return nil, err
+		return nil, newAuthenticationFailedError(err, nil)
 	}
 	logGetTokenSuccess(c, opts)
-	return tk, err
+	return &azcore.AccessToken{
+		Token:     tk.AccessToken,
+		ExpiresOn: tk.ExpiresOn,
+	}, err
 }
 
 var _ azcore.TokenCredential = (*UsernamePasswordCredential)(nil)

@@ -9,6 +9,8 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
 )
 
 // AuthorizationCodeCredentialOptions contains optional parameters for AuthorizationCodeCredential.
@@ -26,9 +28,7 @@ type AuthorizationCodeCredentialOptions struct {
 // obtained from Azure Active Directory. The authorization code flow is described in more detail
 // in Azure Active Directory documentation: https://docs.microsoft.com/azure/active-directory/develop/v2-oauth2-auth-code-flow
 type AuthorizationCodeCredential struct {
-	client       *aadIdentityClient
-	tenantID     string
-	clientID     string
+	client       publicClient
 	authCode     string
 	clientSecret string
 	redirectURI  string
@@ -44,32 +44,45 @@ func NewAuthorizationCodeCredential(tenantID string, clientID string, authCode s
 	if !validTenantID(tenantID) {
 		return nil, errors.New(tenantIDValidationErr)
 	}
-	cp := AuthorizationCodeCredentialOptions{}
-	if options != nil {
-		cp = *options
+	if options == nil {
+		options = &AuthorizationCodeCredentialOptions{}
 	}
-	authorityHost, err := setAuthorityHost(cp.AuthorityHost)
+	authorityHost, err := setAuthorityHost(options.AuthorityHost)
 	if err != nil {
 		return nil, err
 	}
-	c, err := newAADIdentityClient(authorityHost, &cp.ClientOptions)
+	c, err := public.New(clientID,
+		public.WithAuthority(runtime.JoinPaths(authorityHost, tenantID)),
+		public.WithHTTPClient(newPipelineAdapter(&options.ClientOptions)),
+	)
 	if err != nil {
 		return nil, err
 	}
-	return &AuthorizationCodeCredential{tenantID: tenantID, clientID: clientID, authCode: authCode, clientSecret: cp.ClientSecret, redirectURI: redirectURL, client: c}, nil
+	return &AuthorizationCodeCredential{authCode: authCode, clientSecret: options.ClientSecret, redirectURI: redirectURL, client: c}, nil
 }
 
 // GetToken obtains a token from Azure Active Directory by redeeming the authorization code. This method is called automatically by Azure SDK clients.
 // ctx: Context controlling the request lifetime.
 // opts: Options for the token request, in particular the desired scope of the access token.
 func (c *AuthorizationCodeCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (*azcore.AccessToken, error) {
-	tk, err := c.client.authenticateAuthCode(ctx, c.tenantID, c.clientID, c.authCode, c.clientSecret, "", c.redirectURI, opts.Scopes)
+	tk, err := c.client.AcquireTokenSilent(ctx, opts.Scopes)
+	if err == nil {
+		logGetTokenSuccess(c, opts)
+		return &azcore.AccessToken{
+			Token:     tk.AccessToken,
+			ExpiresOn: tk.ExpiresOn,
+		}, err
+	}
+	tk, err = c.client.AcquireTokenByAuthCode(ctx, c.authCode, c.redirectURI, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Authorization Code Credential", err, true)
-		return nil, err
+		return nil, newAuthenticationFailedError(err, nil)
 	}
 	logGetTokenSuccess(c, opts)
-	return tk, nil
+	return &azcore.AccessToken{
+		Token:     tk.AccessToken,
+		ExpiresOn: tk.ExpiresOn,
+	}, err
 }
 
 var _ azcore.TokenCredential = (*AuthorizationCodeCredential)(nil)
