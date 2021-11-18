@@ -112,7 +112,10 @@ func (p pipelineAdapter) Do(r *http.Request) (*http.Response, error) {
 			}
 			body = streaming.NopCloser(bytes.NewReader(b))
 		}
-		req.SetBody(body, r.Header.Get("Content-Type"))
+		err = req.SetBody(body, r.Header.Get("Content-Type"))
+		if err != nil {
+			return nil, err
+		}
 	}
 	resp, err := p.pl.Do(req)
 	if err != nil {
