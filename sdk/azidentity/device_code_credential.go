@@ -135,14 +135,4 @@ func (c *DeviceCodeCredential) GetToken(ctx context.Context, opts policy.TokenRe
 	}, err
 }
 
-// deviceCodeResult is used to store device code related information to help the user login and allow the device code flow to continue
-// to request a token to authenticate a user
-type deviceCodeResult struct {
-	UserCode        string `json:"user_code"`        // User code returned by the service.
-	DeviceCode      string `json:"device_code"`      // Device code returned by the service.
-	VerificationURL string `json:"verification_uri"` // Verification URL where the user must navigate to authenticate using the device code and credentials.
-	Interval        int64  `json:"interval"`         // Polling interval time to check for completion of authentication flow.
-	Message         string `json:"message"`          // User friendly text response that can be used for display purposes.
-}
-
 var _ azcore.TokenCredential = (*DeviceCodeCredential)(nil)
