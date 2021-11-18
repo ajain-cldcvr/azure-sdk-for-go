@@ -15,6 +15,14 @@ import (
 )
 
 // configuration for live tests
+var liveManagedIdentity = struct {
+	clientID   string
+	resourceID string
+}{
+	clientID:   os.Getenv("MANAGED_IDENTITY_CLIENT_ID"),
+	resourceID: os.Getenv("MANAGED_IDENTITY_RESOURCE_ID"),
+}
+
 var liveSP = struct {
 	tenantID string
 	clientID string
@@ -45,7 +53,7 @@ const (
 	fakeClientID   = "fake-client-id"
 	fakeResourceID = "/fake/resource/ID"
 	fakeTenantID   = "fake-tenant"
-	fakeUsername = "fake@user"
+	fakeUsername   = "fake@user"
 )
 
 var liveTestScope = "https://management.core.windows.net//.default"
@@ -60,6 +68,8 @@ func init() {
 	}
 
 	if recording.GetRecordMode() == recording.PlaybackMode {
+		liveManagedIdentity.clientID = fakeClientID
+		liveManagedIdentity.resourceID = fakeResourceID
 		liveSP.secret = "fake-secret"
 		liveSP.clientID = fakeClientID
 		liveSP.tenantID = fakeTenantID
@@ -79,47 +89,25 @@ func TestMain(m *testing.M) {
 		if err != nil {
 			panic(err)
 		}
-		// replace path variables with fake values to simplify matching (these IDs aren't secret)
-		if id, ok := os.LookupEnv("MANAGED_IDENTITY_CLIENT_ID"); ok {
-			err = recording.AddURISanitizer(fakeClientID, id, nil)
-			if err != nil {
-				panic(err)
-			}
-			err = recording.AddHeaderRegexSanitizer(":path", fakeClientID, id, nil)
-			if err != nil {
-				panic(err)
-			}
+		// replace path variables with fake values to simplify matching (the real values aren't secret)
+		pathVars := map[string]string{
+			liveSP.tenantID:   fakeTenantID,
+			liveUser.tenantID: fakeTenantID,
+			liveUser.username: fakeUsername,
 		}
-		if id, ok := os.LookupEnv("MANAGED_IDENTITY_RESOURCE_ID"); ok {
-			replacement := url.QueryEscape(fakeResourceID)
-			target := url.QueryEscape(id)
+		if liveManagedIdentity.clientID != "" {
+			pathVars[liveManagedIdentity.clientID] = fakeClientID
+		}
+		if liveManagedIdentity.resourceID != "" {
+			target := url.QueryEscape(liveManagedIdentity.resourceID)
+			pathVars[target] = url.QueryEscape(fakeResourceID)
+		}
+		for target, replacement := range pathVars {
 			err = recording.AddURISanitizer(replacement, target, nil)
 			if err != nil {
 				panic(err)
 			}
 			err = recording.AddHeaderRegexSanitizer(":path", replacement, target, nil)
-			if err != nil {
-				panic(err)
-			}
-		}
-		for _, tenantID := range []string{liveSP.tenantID, liveUser.tenantID} {
-			if tenantID != "" {
-				err = recording.AddURISanitizer(fakeTenantID, tenantID, nil)
-				if err != nil {
-					panic(err)
-				}
-				err = recording.AddHeaderRegexSanitizer(":path", fakeTenantID, tenantID, nil)
-				if err != nil {
-					panic(err)
-				}
-			}
-		}
-		if liveUser.username != "" {
-			err = recording.AddURISanitizer(fakeUsername, liveUser.username, nil)
-			if err != nil {
-				panic(err)
-			}
-			err = recording.AddHeaderRegexSanitizer(":path", fakeUsername, liveUser.username, nil)
 			if err != nil {
 				panic(err)
 			}

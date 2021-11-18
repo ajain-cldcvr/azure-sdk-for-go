@@ -683,8 +683,15 @@ func TestManagedIdentityCredential_CreateAccessTokenExpiresOnFail(t *testing.T) 
 }
 
 func TestManagedIdentityCredential_IMDSLive(t *testing.T) {
-	if recording.GetRecordMode() == recording.LiveMode {
+	switch recording.GetRecordMode() {
+	case recording.LiveMode:
 		t.Skip("this test doesn't run in live mode because it can't pass in CI")
+	case recording.RecordingMode:
+		// record iff either managed identity environment variable is set, because
+		// otherwise there's no reason to believe the test is running on a VM
+		if len(liveManagedIdentity.clientID)+len(liveManagedIdentity.resourceID) == 0 {
+			t.Skip("neither MANAGED_IDENTITY_CLIENT_ID nor MANAGED_IDENTITY_RESOURCE_ID is set")
+		}
 	}
 	opts, stop := initRecording(t)
 	defer stop()
@@ -705,20 +712,18 @@ func TestManagedIdentityCredential_IMDSLive(t *testing.T) {
 }
 
 func TestManagedIdentityCredential_IMDSClientIDLive(t *testing.T) {
-	id := os.Getenv("MANAGED_IDENTITY_CLIENT_ID")
 	switch recording.GetRecordMode() {
 	case recording.LiveMode:
 		t.Skip("this test doesn't run in live mode because it can't pass in CI")
-	case recording.PlaybackMode:
-		id = fakeClientID
 	case recording.RecordingMode:
-		if id == "" {
+		if liveManagedIdentity.clientID == "" {
 			t.Skip("MANAGED_IDENTITY_CLIENT_ID isn't set")
 		}
 	}
 	opts, stop := initRecording(t)
 	defer stop()
-	cred, err := NewManagedIdentityCredential(&ManagedIdentityCredentialOptions{ClientOptions: opts, ID: ClientID(id)})
+	o := ManagedIdentityCredentialOptions{ClientOptions: opts, ID: ClientID(liveManagedIdentity.clientID)}
+	cred, err := NewManagedIdentityCredential(&o)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -735,20 +740,18 @@ func TestManagedIdentityCredential_IMDSClientIDLive(t *testing.T) {
 }
 
 func TestManagedIdentityCredential_IMDSResourceIDLive(t *testing.T) {
-	id := os.Getenv("MANAGED_IDENTITY_RESOURCE_ID")
 	switch recording.GetRecordMode() {
 	case recording.LiveMode:
 		t.Skip("this test doesn't run in live mode because it can't pass in CI")
-	case recording.PlaybackMode:
-		id = fakeResourceID
 	case recording.RecordingMode:
-		if id == "" {
+		if liveManagedIdentity.resourceID == "" {
 			t.Skip("MANAGED_IDENTITY_RESOURCE_ID isn't set")
 		}
 	}
 	opts, stop := initRecording(t)
 	defer stop()
-	cred, err := NewManagedIdentityCredential(&ManagedIdentityCredentialOptions{ClientOptions: opts, ID: ResourceID(id)})
+	o := ManagedIdentityCredentialOptions{ClientOptions: opts, ID: ResourceID(liveManagedIdentity.resourceID)}
+	cred, err := NewManagedIdentityCredential(&o)
 	if err != nil {
 		t.Fatal(err)
 	}
