@@ -91,25 +91,22 @@ func TestMain(m *testing.M) {
 		}
 		// replace path variables with fake values to simplify matching (the real values aren't secret)
 		pathVars := map[string]string{
-			liveSP.tenantID:   fakeTenantID,
-			liveUser.tenantID: fakeTenantID,
-			liveUser.username: fakeUsername,
-		}
-		if liveManagedIdentity.clientID != "" {
-			pathVars[liveManagedIdentity.clientID] = fakeClientID
-		}
-		if liveManagedIdentity.resourceID != "" {
-			target := url.QueryEscape(liveManagedIdentity.resourceID)
-			pathVars[target] = url.QueryEscape(fakeResourceID)
+			liveManagedIdentity.clientID:                    fakeClientID,
+			url.QueryEscape(liveManagedIdentity.resourceID): url.QueryEscape(fakeResourceID),
+			liveSP.tenantID:                                 fakeTenantID,
+			liveUser.tenantID:                               fakeTenantID,
+			liveUser.username:                               fakeUsername,
 		}
 		for target, replacement := range pathVars {
-			err = recording.AddURISanitizer(replacement, target, nil)
-			if err != nil {
-				panic(err)
-			}
-			err = recording.AddHeaderRegexSanitizer(":path", replacement, target, nil)
-			if err != nil {
-				panic(err)
+			if target != "" {
+				err = recording.AddURISanitizer(replacement, target, nil)
+				if err != nil {
+					panic(err)
+				}
+				err = recording.AddHeaderRegexSanitizer(":path", replacement, target, nil)
+				if err != nil {
+					panic(err)
+				}
 			}
 		}
 		// remove token request bodies (which are form encoded) because they contain

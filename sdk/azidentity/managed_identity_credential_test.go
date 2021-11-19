@@ -706,7 +706,7 @@ func TestManagedIdentityCredential_IMDSLive(t *testing.T) {
 	if tk.Token == "" {
 		t.Fatal("GetToken returned an invalid token")
 	}
-	if !tk.ExpiresOn.After(time.Now().UTC()) {
+	if tk.ExpiresOn.Before(time.Now().UTC()) {
 		t.Fatal("GetToken returned an invalid expiration time")
 	}
 }
@@ -734,7 +734,7 @@ func TestManagedIdentityCredential_IMDSClientIDLive(t *testing.T) {
 	if tk.Token == "" {
 		t.Fatal("GetToken returned an invalid token")
 	}
-	if !tk.ExpiresOn.After(time.Now().UTC()) {
+	if tk.ExpiresOn.Before(time.Now().UTC()) {
 		t.Fatal("GetToken returned an invalid expiration time")
 	}
 }
@@ -762,7 +762,7 @@ func TestManagedIdentityCredential_IMDSResourceIDLive(t *testing.T) {
 	if tk.Token == "" {
 		t.Fatal("GetToken returned an invalid token")
 	}
-	if !tk.ExpiresOn.After(time.Now().UTC()) {
+	if tk.ExpiresOn.Before(time.Now().UTC()) {
 		t.Fatal("GetToken returned an invalid expiration time")
 	}
 }

@@ -49,8 +49,15 @@ func TestUsernamePasswordCredential_Live(t *testing.T) {
 	if tk.Token == "" {
 		t.Fatalf("GetToken returned an invalid token")
 	}
-	if !tk.ExpiresOn.After(time.Now().UTC()) {
+	if tk.ExpiresOn.Before(time.Now().UTC()) {
 		t.Fatalf("GetToken returned an invalid expiration time")
+	}
+	tk2, err := cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{liveTestScope}})
+	if err != nil {
+		t.Fatalf("GetToken failed: %v", err)
+	}
+	if tk2.Token != tk.Token || tk2.ExpiresOn.After(tk.ExpiresOn) {
+		t.Fatal("expected a cached token")
 	}
 }
 

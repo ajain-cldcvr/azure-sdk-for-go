@@ -85,7 +85,7 @@ func TestDeviceCodeCredential_UserPromptError(t *testing.T) {
 
 func TestDeviceCodeCredential_Live(t *testing.T) {
 	if recording.GetRecordMode() != recording.PlaybackMode {
-		t.Skip("this test requires manual recording and can't succeed in CI")
+		t.Skip("this test requires manual recording and can't pass live in CI")
 	}
 	o, stop := initRecording(t)
 	defer stop()
@@ -104,7 +104,19 @@ func TestDeviceCodeCredential_Live(t *testing.T) {
 	if tk.Token == "" {
 		t.Fatalf("GetToken returned an invalid token")
 	}
-	if !tk.ExpiresOn.After(time.Now().UTC()) {
+	if tk.ExpiresOn.Before(time.Now().UTC()) {
 		t.Fatalf("GetToken returned an invalid expiration time")
+	}
+	_, actual := tk.ExpiresOn.Zone()
+	_, expected := time.Now().UTC().Zone()
+	if actual != expected {
+		t.Fatal("ExpiresOn isn't UTC")
+	}
+	tk2, err := cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{liveTestScope}})
+	if err != nil {
+		t.Fatalf("GetToken failed: %v", err)
+	}
+	if tk2.Token != tk.Token || tk2.ExpiresOn.After(tk.ExpiresOn) {
+		t.Fatal("expected a cached token")
 	}
 }
