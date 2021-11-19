@@ -61,24 +61,19 @@ func NewClientSecretCredential(tenantID string, clientID string, clientSecret st
 // ctx: Context used to control the request lifetime.
 // opts: Options for the token request, in particular the desired scope of the access token.
 func (c *ClientSecretCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (*azcore.AccessToken, error) {
-	tk, err := c.client.AcquireTokenSilent(ctx, opts.Scopes)
+	ar, err := c.client.AcquireTokenSilent(ctx, opts.Scopes)
 	if err == nil {
 		logGetTokenSuccess(c, opts)
-		return &azcore.AccessToken{
-			Token:     tk.AccessToken,
-			ExpiresOn: tk.ExpiresOn,
-		}, err
+		return &azcore.AccessToken{Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC()}, err
 	}
-	tk, err = c.client.AcquireTokenByCredential(ctx, opts.Scopes)
+
+	ar, err = c.client.AcquireTokenByCredential(ctx, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Client Secret Credential", err, true)
 		return nil, newAuthenticationFailedError(err, nil)
 	}
 	logGetTokenSuccess(c, opts)
-	return &azcore.AccessToken{
-		Token:     tk.AccessToken,
-		ExpiresOn: tk.ExpiresOn,
-	}, err
+	return &azcore.AccessToken{Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC()}, err
 }
 
 var _ azcore.TokenCredential = (*ClientSecretCredential)(nil)

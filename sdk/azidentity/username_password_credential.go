@@ -30,6 +30,7 @@ type UsernamePasswordCredential struct {
 	client   publicClient
 	username string
 	password string
+	account  public.Account
 }
 
 // NewUsernamePasswordCredential creates a UsernamePasswordCredential.
@@ -64,24 +65,19 @@ func NewUsernamePasswordCredential(tenantID string, clientID string, username st
 // ctx: Context used to control the request lifetime.
 // opts: Options for the token request, in particular the desired scope of the access token.
 func (c *UsernamePasswordCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (*azcore.AccessToken, error) {
-	tk, err := c.client.AcquireTokenSilent(ctx, opts.Scopes) // TODO do we need the account here
+	ar, err := c.client.AcquireTokenSilent(ctx, opts.Scopes, public.WithSilentAccount(c.account))
 	if err == nil {
 		logGetTokenSuccess(c, opts)
-		return &azcore.AccessToken{
-			Token:     tk.AccessToken,
-			ExpiresOn: tk.ExpiresOn,
-		}, err
+		return &azcore.AccessToken{Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC()}, err
 	}
-	tk, err = c.client.AcquireTokenByUsernamePassword(ctx, opts.Scopes, c.username, c.password)
+	ar, err = c.client.AcquireTokenByUsernamePassword(ctx, opts.Scopes, c.username, c.password)
 	if err != nil {
 		addGetTokenFailureLogs("Username Password Credential", err, true)
 		return nil, newAuthenticationFailedError(err, nil)
 	}
+	c.account = ar.Account
 	logGetTokenSuccess(c, opts)
-	return &azcore.AccessToken{
-		Token:     tk.AccessToken,
-		ExpiresOn: tk.ExpiresOn,
-	}, err
+	return &azcore.AccessToken{Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC()}, err
 }
 
 var _ azcore.TokenCredential = (*UsernamePasswordCredential)(nil)

@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/confidential"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
 )
 
@@ -20,7 +21,7 @@ type AuthorizationCodeCredentialOptions struct {
 	// ClientSecret is one of the application's client secrets.
 	ClientSecret string
 	// AuthorityHost is the base URL of an Azure Active Directory authority. Defaults
-	// to the value of environment variable AZURE_AUTHORITY_HOST, if set, or AzurePublicCloud.
+	// to the value of environment variable AZURE_AUTHORITY_HOST, if set, or AzureconfidentialCloud.
 	AuthorityHost AuthorityHost
 }
 
@@ -28,10 +29,12 @@ type AuthorizationCodeCredentialOptions struct {
 // obtained from Azure Active Directory. The authorization code flow is described in more detail
 // in Azure Active Directory documentation: https://docs.microsoft.com/azure/active-directory/develop/v2-oauth2-auth-code-flow
 type AuthorizationCodeCredential struct {
-	client       publicClient
+	cca          confidentialClient
+	pca          publicClient
 	authCode     string
 	clientSecret string
 	redirectURI  string
+	account      confidential.Account
 }
 
 // NewAuthorizationCodeCredential constructs an AuthorizationCodeCredential.
@@ -51,6 +54,20 @@ func NewAuthorizationCodeCredential(tenantID string, clientID string, authCode s
 	if err != nil {
 		return nil, err
 	}
+	if options.ClientSecret != "" {
+		cred, err := confidential.NewCredFromSecret(options.ClientSecret)
+		if err != nil {
+			return nil, err
+		}
+		c, err := confidential.New(clientID, cred,
+			confidential.WithAuthority(runtime.JoinPaths(authorityHost, tenantID)),
+			confidential.WithHTTPClient(newPipelineAdapter(&options.ClientOptions)),
+		)
+		if err != nil {
+			return nil, err
+		}
+		return &AuthorizationCodeCredential{authCode: authCode, clientSecret: options.ClientSecret, redirectURI: redirectURL, cca: c}, nil
+	}
 	c, err := public.New(clientID,
 		public.WithAuthority(runtime.JoinPaths(authorityHost, tenantID)),
 		public.WithHTTPClient(newPipelineAdapter(&options.ClientOptions)),
@@ -58,31 +75,42 @@ func NewAuthorizationCodeCredential(tenantID string, clientID string, authCode s
 	if err != nil {
 		return nil, err
 	}
-	return &AuthorizationCodeCredential{authCode: authCode, clientSecret: options.ClientSecret, redirectURI: redirectURL, client: c}, nil
+	return &AuthorizationCodeCredential{authCode: authCode, clientSecret: options.ClientSecret, redirectURI: redirectURL, pca: c}, nil
 }
 
 // GetToken obtains a token from Azure Active Directory by redeeming the authorization code. This method is called automatically by Azure SDK clients.
 // ctx: Context controlling the request lifetime.
 // opts: Options for the token request, in particular the desired scope of the access token.
 func (c *AuthorizationCodeCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (*azcore.AccessToken, error) {
-	tk, err := c.client.AcquireTokenSilent(ctx, opts.Scopes)
+	if c.cca != nil {
+		ar, err := c.cca.AcquireTokenSilent(ctx, opts.Scopes, confidential.WithSilentAccount(c.account))
+		if err == nil {
+			logGetTokenSuccess(c, opts)
+			return &azcore.AccessToken{Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC()}, err
+		}
+		ar, err = c.cca.AcquireTokenByAuthCode(ctx, c.authCode, c.redirectURI, opts.Scopes)
+		if err != nil {
+			addGetTokenFailureLogs("Authorization Code Credential", err, true)
+			return nil, newAuthenticationFailedError(err, nil)
+		}
+		logGetTokenSuccess(c, opts)
+		c.account = ar.Account
+		return &azcore.AccessToken{Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC()}, err
+	}
+
+	ar, err := c.pca.AcquireTokenSilent(ctx, opts.Scopes, public.WithSilentAccount(c.account))
 	if err == nil {
 		logGetTokenSuccess(c, opts)
-		return &azcore.AccessToken{
-			Token:     tk.AccessToken,
-			ExpiresOn: tk.ExpiresOn,
-		}, err
+		return &azcore.AccessToken{Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC()}, err
 	}
-	tk, err = c.client.AcquireTokenByAuthCode(ctx, c.authCode, c.redirectURI, opts.Scopes)
+	ar, err = c.pca.AcquireTokenByAuthCode(ctx, c.authCode, c.redirectURI, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Authorization Code Credential", err, true)
 		return nil, newAuthenticationFailedError(err, nil)
 	}
 	logGetTokenSuccess(c, opts)
-	return &azcore.AccessToken{
-		Token:     tk.AccessToken,
-		ExpiresOn: tk.ExpiresOn,
-	}, err
+	c.account = ar.Account
+	return &azcore.AccessToken{Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC()}, err
 }
 
 var _ azcore.TokenCredential = (*AuthorizationCodeCredential)(nil)

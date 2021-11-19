@@ -24,7 +24,7 @@ import (
 
 const (
 	headerMetadata = "Metadata"
-	imdsEndpoint = "http://169.254.169.254/metadata/identity/oauth2/token"
+	imdsEndpoint   = "http://169.254.169.254/metadata/identity/oauth2/token"
 )
 
 const (

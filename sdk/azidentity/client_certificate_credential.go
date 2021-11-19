@@ -93,21 +93,16 @@ func (c *ClientCertificateCredential) GetToken(ctx context.Context, opts policy.
 	tk, err := c.client.AcquireTokenSilent(ctx, opts.Scopes)
 	if err == nil {
 		logGetTokenSuccess(c, opts)
-		return &azcore.AccessToken{
-			Token:     tk.AccessToken,
-			ExpiresOn: tk.ExpiresOn,
-		}, err
+		return &azcore.AccessToken{Token: tk.AccessToken, ExpiresOn: tk.ExpiresOn.UTC()}, err
 	}
+
 	tk, err = c.client.AcquireTokenByCredential(ctx, opts.Scopes)
 	if err != nil {
 		addGetTokenFailureLogs("Client Certificate Credential", err, true)
 		return nil, newAuthenticationFailedError(err, nil)
 	}
 	logGetTokenSuccess(c, opts)
-	return &azcore.AccessToken{
-		Token:     tk.AccessToken,
-		ExpiresOn: tk.ExpiresOn,
-	}, err
+	return &azcore.AccessToken{Token: tk.AccessToken, ExpiresOn: tk.ExpiresOn.UTC()}, err
 }
 
 // ParseCertificates loads certificates and a private key for use with NewClientCertificateCredential.

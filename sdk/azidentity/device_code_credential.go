@@ -71,6 +71,7 @@ type DeviceCodeMessage struct {
 type DeviceCodeCredential struct {
 	client     publicClient
 	userPrompt func(context.Context, DeviceCodeMessage) error
+	account    public.Account
 }
 
 // NewDeviceCodeCredential creates a DeviceCodeCredential.
@@ -103,12 +104,9 @@ func NewDeviceCodeCredential(options *DeviceCodeCredentialOptions) (*DeviceCodeC
 // ctx: Context used to control the request lifetime.
 // opts: Options for the token request, in particular the desired scope of the access token.
 func (c *DeviceCodeCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (*azcore.AccessToken, error) {
-	tk, err := c.client.AcquireTokenSilent(ctx, opts.Scopes)
+	ar, err := c.client.AcquireTokenSilent(ctx, opts.Scopes, public.WithSilentAccount(c.account))
 	if err == nil {
-		return &azcore.AccessToken{
-			Token:     tk.AccessToken,
-			ExpiresOn: tk.ExpiresOn,
-		}, err
+		return &azcore.AccessToken{Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC()}, err
 	}
 	dc, err := c.client.AcquireTokenByDeviceCode(ctx, opts.Scopes)
 	if err != nil {
@@ -123,16 +121,14 @@ func (c *DeviceCodeCredential) GetToken(ctx context.Context, opts policy.TokenRe
 	if err != nil {
 		return nil, err
 	}
-	tk, err = dc.AuthenticationResult(ctx)
+	ar, err = dc.AuthenticationResult(ctx)
 	if err != nil {
 		addGetTokenFailureLogs("Device Code Credential", err, true)
 		return nil, newAuthenticationFailedError(err, nil)
 	}
+	c.account = ar.Account
 	logGetTokenSuccess(c, opts)
-	return &azcore.AccessToken{
-		Token:     tk.AccessToken,
-		ExpiresOn: tk.ExpiresOn,
-	}, err
+	return &azcore.AccessToken{Token: ar.AccessToken, ExpiresOn: ar.ExpiresOn.UTC()}, err
 }
 
 var _ azcore.TokenCredential = (*DeviceCodeCredential)(nil)
