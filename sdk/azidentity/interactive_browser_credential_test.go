@@ -68,13 +68,7 @@ func TestInteractiveBrowserCredential_GetTokenLive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{scope}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tk.Token == "" || tk.ExpiresOn.Before(time.Now().UTC()) {
-		t.Fatal("GetToken returned an invalid access token")
-	}
+	testGetTokenSuccess(t, cred)
 }
 
 func TestInteractiveBrowserCredential_RedirectURLLive(t *testing.T) {
@@ -86,11 +80,5 @@ func TestInteractiveBrowserCredential_RedirectURLLive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{liveTestScope}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tk.Token == "" || tk.ExpiresOn.Before(time.Now().UTC()) {
-		t.Fatal("GetToken returned an invalid access token")
-	}
+	testGetTokenSuccess(t, cred)
 }

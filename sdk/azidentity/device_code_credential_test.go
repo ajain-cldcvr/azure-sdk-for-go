@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/recording"
@@ -97,26 +96,5 @@ func TestDeviceCodeCredential_Live(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tk, err := cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{liveTestScope}})
-	if err != nil {
-		t.Fatalf("GetToken failed: %v", err)
-	}
-	if tk.Token == "" {
-		t.Fatalf("GetToken returned an invalid token")
-	}
-	if tk.ExpiresOn.Before(time.Now().UTC()) {
-		t.Fatalf("GetToken returned an invalid expiration time")
-	}
-	_, actual := tk.ExpiresOn.Zone()
-	_, expected := time.Now().UTC().Zone()
-	if actual != expected {
-		t.Fatal("ExpiresOn isn't UTC")
-	}
-	tk2, err := cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{liveTestScope}})
-	if err != nil {
-		t.Fatalf("GetToken failed: %v", err)
-	}
-	if tk2.Token != tk.Token || tk2.ExpiresOn.After(tk.ExpiresOn) {
-		t.Fatal("expected a cached token")
-	}
+	testGetTokenSuccess(t, cred)
 }

@@ -4,12 +4,15 @@
 package azidentity
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/internal/recording"
 )
@@ -171,4 +174,30 @@ func (p *recordingPolicy) Do(req *policy.Request) (resp *http.Response, err erro
 		r.URL.Scheme = "https"
 	}
 	return req.Next()
+}
+
+// testGetTokenSuccess is a helper for happy path tests that acquires, and validates, a token from a credential
+func testGetTokenSuccess(t *testing.T, cred azcore.TokenCredential) {
+	tk, err := cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{liveTestScope}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tk.Token == "" {
+		t.Fatal("GetToken returned an invalid token")
+	}
+	if tk.ExpiresOn.Before(time.Now().UTC()) {
+		t.Fatal("GetToken returned an invalid expiration time")
+	}
+	_, actual := tk.ExpiresOn.Zone()
+	_, expected := time.Now().UTC().Zone()
+	if actual != expected {
+		t.Fatal("ExpiresOn isn't UTC")
+	}
+	tk2, err := cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{liveTestScope}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tk2.Token != tk.Token || tk2.ExpiresOn.After(tk.ExpiresOn) {
+		t.Fatal("expected a cached token")
+	}
 }
